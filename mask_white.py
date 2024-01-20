@@ -18,7 +18,7 @@ def filter_colors(image_path):
             r, g, b = image.getpixel((x, y))
 
             # Check if the pixel is white (or close to white)
-            if r > 5 and g > 5 and b > 5:
+            if r > 2 and g > 2 and b > 2:
                 # Set the pixel to white
                 image.putpixel((x, y), (255, 255, 255))
             # else:
