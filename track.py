@@ -5,6 +5,7 @@ import time
 import threading
 from ultralytics import YOLO
 from mask_white import filter_colors
+from RRT import find_RRT_path
 
 ######################################################################
 width = 640  # WIDTH OF THE IMAGE
@@ -53,7 +54,8 @@ def draw_contour_on_objects(img):
 
     file_path1 = "captured_image.jpg"
     cv2.imwrite(file_path1, img)
-    filter_colors(file_path1)
+    filtered_image_path = filter_colors(file_path1)
+    find_RRT_path(filtered_image_path)
 
     with lock:
         thread_is_processing = False
