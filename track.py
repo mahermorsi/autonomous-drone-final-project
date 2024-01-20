@@ -12,9 +12,31 @@ width = 640  # WIDTH OF THE IMAGE
 height = 480  # HEIGHT OF THE IMAGE
 deadZone = 45  # initially it was 100
 ######################################################################
+startCounter = 0
+global imgContour
+
+# CONNECT TO TELLO
+me = Tello()
+me.connect()
+me.for_back_velocity = 0
+me.left_right_velocity = 0
+me.up_down_velocity = 0
+me.yaw_velocity = 0
+me.speed = 0
+me.TIME_BTW_RC_CONTROL_COMMANDS = 0.1
+
+print(me.get_battery())
+
+me.streamoff()
+me.streamon()
+########################
+
+frameWidth = width
+frameHeight = height
 
 lock = threading.Lock()  # lock until the function completes its job, before receiving another image.
 thread_is_processing = False
+
 
 def detect_objects(img):
     # Get img shape
@@ -39,76 +61,41 @@ def detect_objects(img):
 
 
 def draw_contour_on_objects(img):
+    if img is None:
+        print("Input image is None. Exiting function.")
+        return
 
-    global thread_is_processing
-    with lock:
-        thread_is_processing = True
-    bboxes, classes, segmentations, scores = detect_objects(img)
-    for bbox, class_id, seg, score in zip(bboxes, classes, segmentations, scores):
-        # (x, y, x2, y2) = bbox
+    try:
+        global thread_is_processing
+        with lock:
+            thread_is_processing = True
+        bboxes, classes, segmentations, scores = detect_objects(img)
+        for bbox, class_id, seg, score in zip(bboxes, classes, segmentations, scores):
+            try:
+                # (x, y, x2, y2) = bbox
+                # cv2.polylines(img, [seg], True, (0, 0, 255), 4)
+                cv2.fillPoly(img, [seg], (0, 0, 0))
+                # cv2.putText(img, str(class_id), (x, y - 10), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2)
+            except Exception as e_inner:
+                print(f"Error while processing object: {e_inner}")
 
-        # cv2.polylines(img, [seg], True, (0, 0, 255), 4)
+        file_path1 = "captured_image.jpg"
+        cv2.imwrite(file_path1, img)
+        filtered_image_path = filter_colors(file_path1)
+        find_RRT_path(filtered_image_path)
 
-        cv2.fillPoly(img, [seg], (0, 0, 0))
-        # cv2.putText(img, str(class_id), (x, y - 10), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2)
+    except Exception as e_outer:
+        print(f"Error in draw_contour_on_objects function: {e_outer}")
 
-    file_path1 = "captured_image.jpg"
-    cv2.imwrite(file_path1, img)
-    filtered_image_path = filter_colors(file_path1)
-    find_RRT_path(filtered_image_path)
-
-    with lock:
-        thread_is_processing = False
-
-
-startCounter = 0
-
-# CONNECT TO TELLO
-me = Tello()
-me.connect()
-me.for_back_velocity = 0
-me.left_right_velocity = 0
-me.up_down_velocity = 0
-me.yaw_velocity = 0
-me.speed = 0
-me.TIME_BTW_RC_CONTROL_COMMANDS = 0.1
-
-print(me.get_battery())
-
-me.streamoff()
-me.streamon()
-########################
-
-frameWidth = width
-frameHeight = height
-# cap = cv2.VideoCapture(1)
-# cap.set(3, frameWidth)
-# cap.set(4, frameHeight)
-# cap.set(10,200)
-
-
-global imgContour
-
+    finally:
+        with lock:
+            thread_is_processing = False
 
 
 def empty(a):
     pass
 
 
-cv2.namedWindow("HSV")
-cv2.resizeWindow("HSV", 640, 240)
-cv2.createTrackbar("HUE Min", "HSV", 117, 179, empty)
-cv2.createTrackbar("HUE Max", "HSV", 132, 179, empty)
-cv2.createTrackbar("SAT Min", "HSV", 208, 255, empty)
-cv2.createTrackbar("SAT Max", "HSV", 255, 255, empty)
-cv2.createTrackbar("VALUE Min", "HSV", 0, 255, empty)
-cv2.createTrackbar("VALUE Max", "HSV", 210, 255, empty)
-
-cv2.namedWindow("Parameters")
-cv2.resizeWindow("Parameters", 640, 240)
-cv2.createTrackbar("Threshold1", "Parameters", 89, 255, empty)
-cv2.createTrackbar("Threshold2", "Parameters", 0, 255, empty)
-cv2.createTrackbar("Area", "Parameters", 2500,30000, empty)
 
 
 def stackImages(scale, imgArray):
@@ -225,9 +212,24 @@ while frame is None or frame.mean() < 10:  # Check for black frame
     print("NO FRAME!")
     time.sleep(0.1)
 
-while True:
+cv2.namedWindow("HSV")
+cv2.resizeWindow("HSV", 640, 240)
+cv2.createTrackbar("HUE Min", "HSV", 117, 179, empty)
+cv2.createTrackbar("HUE Max", "HSV", 132, 179, empty)
+cv2.createTrackbar("SAT Min", "HSV", 208, 255, empty)
+cv2.createTrackbar("SAT Max", "HSV", 255, 255, empty)
+cv2.createTrackbar("VALUE Min", "HSV", 0, 255, empty)
+cv2.createTrackbar("VALUE Max", "HSV", 210, 255, empty)
 
-    # GET THE IMAGE FROM TELLOr
+cv2.namedWindow("Parameters")
+cv2.resizeWindow("Parameters", 640, 240)
+cv2.createTrackbar("Threshold1", "Parameters", 89, 255, empty)
+cv2.createTrackbar("Threshold2", "Parameters", 0, 255, empty)
+cv2.createTrackbar("Area", "Parameters", 2500,30000, empty)
+
+
+while True:
+    # GET THE IMAGE FROM TELLO
     frame_read = me.get_frame_read()
     myFrame = frame_read.frame
 
@@ -235,11 +237,14 @@ while True:
     imgContour = img.copy()
     objectsImage = img.copy()
 
-    with lock:
-        if not thread_is_processing:
-            t = threading.Thread(target=draw_contour_on_objects, args=(objectsImage,))
-            t.daemon = True
-            t.start()
+    # execute RRT algorithm only if R key is pressed
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord('r') or key == ord('R'):
+        with lock:
+            if not thread_is_processing:
+                t = threading.Thread(target=draw_contour_on_objects, args=(objectsImage,))
+                t.daemon = True
+                t.start()
 
     imgHsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     h_min = cv2.getTrackbarPos("HUE Min", "HSV")
@@ -289,5 +294,4 @@ while True:
         #     thr.join()
         break
 
-# cap.release()
 cv2.destroyAllWindows()

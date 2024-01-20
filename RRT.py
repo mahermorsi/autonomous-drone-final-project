@@ -3,10 +3,11 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 import random
+import cv2
 
 
 class RRT:
-    def __init__(self, start, goal, obstacles, image_size, step_size=90, max_iterations=2000):
+    def __init__(self, start, goal, obstacles, image_size, step_size=100, max_iterations=1000):
         self.start = start
         self.goal = goal
         self.obstacles = obstacles
@@ -55,6 +56,7 @@ class RRT:
 
     def find_path(self):
         fig, ax = plt.subplots()
+        consecutive_failures = 0
         for _ in range(self.max_iterations):
             random_point = self.generate_random_point()
             nearest_point = self.find_nearest_point(random_point)
@@ -78,7 +80,12 @@ class RRT:
                 ax.set_title("RRT Path Planning (Iteration: {})".format(_ + 1))
                 plt.pause(0.01)
                 return path
+            consecutive_failures += 1
+            if consecutive_failures >= 50:  # Adjust this value based on your requirements
+                print("Failed to find a path within consecutive failures limit.")
+                break
 
+        print("Failed to find a path within maximum iterations.")
         return None
 
     def construct_path(self):
@@ -92,10 +99,6 @@ class RRT:
         return path
 
 
-def plot_image(obstacles):
-    plt.imshow(obstacles, cmap='gray')
-    plt.show()
-
 
 def find_RRT_path(objects_image_path):
     # Load image
@@ -107,7 +110,6 @@ def find_RRT_path(objects_image_path):
     obstacles = np.where(image_array == 0, 0, 1)  # 0 represents obstacles, 1 represents path
 
     plot_thread = threading.Thread(target=plot_image, args=(obstacles,))
-    plot_thread.daemon = True
     plot_thread.start()
     start_x = int(input("Enter start x-coordinate: "))
     start_y = int(input("Enter start y-coordinate: "))
@@ -118,7 +120,7 @@ def find_RRT_path(objects_image_path):
     end_y = int(input("Enter end y-coordinate: "))
     plt.plot(end_x, end_y, 'bo', markersize=5, label='Goal')
     goal = (end_x, end_y)
-
+    plot_thread.join()
     # print(image_array.shape)
 
     # Create RRT planner
@@ -136,10 +138,23 @@ def find_RRT_path(objects_image_path):
         plt.plot(goal[0], goal[1], 'bo', markersize=5)
         plt.title("RRT Path Planning")
         plt.savefig("final_path.png")
-        plt.show()
+        plot_image(image_array)
 
     else:
         print("Failed to find a path.")
 
 
 
+def plot_image(img):
+    if img is None:
+        print("Input image is None. Cannot plot.")
+        return
+
+    try:
+        plt.imshow(img, cmap='gray')
+        plt.show()
+    except Exception as e:
+        print(f"Error in plot_image function: {e}")
+
+
+find_RRT_path('masked_image.png')
