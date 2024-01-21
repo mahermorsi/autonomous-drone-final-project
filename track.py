@@ -1,19 +1,20 @@
-from djitellopy import Tello
+import threading
+import time
 import cv2
 import numpy as np
-import time
-import threading
+from djitellopy import Tello
 from ultralytics import YOLO
-from mask_white import filter_colors
-from RRT import find_RRT_path
+from RRT_Star_Beta import find_rrt_path
+from mask_white import convert_non_black_to_white
 
 ######################################################################
 width = 640  # WIDTH OF THE IMAGE
 height = 480  # HEIGHT OF THE IMAGE
 deadZone = 45  # initially it was 100
-######################################################################
 startCounter = 0
 global imgContour
+######################################################################
+
 
 # CONNECT TO TELLO
 me = Tello()
@@ -79,10 +80,13 @@ def draw_contour_on_objects(img):
             except Exception as e_inner:
                 print(f"Error while processing object: {e_inner}")
 
-        file_path1 = "captured_image.jpg"
-        cv2.imwrite(file_path1, img)
-        filtered_image_path = filter_colors(file_path1)
-        find_RRT_path(filtered_image_path)
+        drone_frame_path = "captured_image.jpg"
+        cv2.imwrite(drone_frame_path, img)
+        filtered_image_path = convert_non_black_to_white(drone_frame_path)
+        if filtered_image_path:
+            find_rrt_path(filtered_image_path)
+        else:
+            print("convert_non_black_to_white returned None. Unable to proceed.")
 
     except Exception as e_outer:
         print(f"Error in draw_contour_on_objects function: {e_outer}")
@@ -94,8 +98,6 @@ def draw_contour_on_objects(img):
 
 def empty(a):
     pass
-
-
 
 
 def stackImages(scale, imgArray):
@@ -132,7 +134,6 @@ def stackImages(scale, imgArray):
 
 
 def getContours(img, imgContour):
-
     contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     for cnt in contours:
         area = cv2.contourArea(cnt)
@@ -154,7 +155,7 @@ def getContours(img, imgContour):
                 me.for_back_velocity = -30
 
             else:
-                me.for_back_velocity=0
+                me.for_back_velocity = 0
 
             if (cx < int(frameWidth / 2) - deadZone):
                 cv2.putText(imgContour, " ROTATE LEFT ", (20, 200), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 3)
@@ -172,20 +173,23 @@ def getContours(img, imgContour):
 
                 me.yaw_velocity = 30
             else:
-                me.yaw_velocity=0
+                me.yaw_velocity = 0
 
             height = me.get_height()
             if (height < 140):
-                me.up_down_velocity=20
-                cv2.putText(imgContour, "GO UP || height is: "+str(height), (500, 50), cv2.FONT_HERSHEY_COMPLEX,1,(0, 0, 255), 3)
+                me.up_down_velocity = 20
+                cv2.putText(imgContour, "GO UP || height is: " + str(height), (500, 50), cv2.FONT_HERSHEY_COMPLEX, 1,
+                            (0, 0, 255), 3)
             #        cv2.rectangle(imgContour,(int(frameWidth/2-deadZone),0),(int(frameWidth/2+deadZone),int(frameHeight/2)-deadZone),(0,0,255),cv2.FILLED)
 
             elif (height > 150):
-                me.up_down_velocity=-20
-                cv2.putText(imgContour, "GO DOWN || height is: "+str(height), (500, 50), cv2.FONT_HERSHEY_COMPLEX, 1,(0, 0, 255), 3)
+                me.up_down_velocity = -20
+                cv2.putText(imgContour, "GO DOWN || height is: " + str(height), (500, 50), cv2.FONT_HERSHEY_COMPLEX, 1,
+                            (0, 0, 255), 3)
             #        cv2.rectangle(imgContour,(int(frameWidth/2-deadZone),int(frameHeight/2)+deadZone),(int(frameWidth/2+deadZone),frameHeight),(0,0,255),cv2.FILLED)
 
-            else: me.up_down_velocity=0
+            else:
+                me.up_down_velocity = 0
 
             cv2.line(imgContour, (int(frameWidth / 2), int(frameHeight / 2)), (cx, cy), (0, 0, 255), 3)
             cv2.rectangle(imgContour, (x, y), (x + w, y + h), (0, 255, 0), 5)
@@ -197,7 +201,6 @@ def getContours(img, imgContour):
                         0.7, (0, 255, 0), 2)
 
 
-
 def display(img):
     cv2.line(img, (int(frameWidth / 2) - deadZone, 0), (int(frameWidth / 2) - deadZone, frameHeight), (255, 255, 0), 3)
     cv2.line(img, (int(frameWidth / 2) + deadZone, 0), (int(frameWidth / 2) + deadZone, frameHeight), (255, 255, 0), 3)
@@ -206,27 +209,29 @@ def display(img):
     cv2.line(img, (0, int(frameHeight / 2) + deadZone), (frameWidth, int(frameHeight / 2) + deadZone), (255, 255, 0), 3)
 
 
+def create_cv_windows():
+    cv2.namedWindow("HSV")
+    cv2.resizeWindow("HSV", 640, 240)
+    cv2.createTrackbar("HUE Min", "HSV", 117, 179, empty)
+    cv2.createTrackbar("HUE Max", "HSV", 132, 179, empty)
+    cv2.createTrackbar("SAT Min", "HSV", 208, 255, empty)
+    cv2.createTrackbar("SAT Max", "HSV", 255, 255, empty)
+    cv2.createTrackbar("VALUE Min", "HSV", 0, 255, empty)
+    cv2.createTrackbar("VALUE Max", "HSV", 210, 255, empty)
+
+    cv2.namedWindow("Parameters")
+    cv2.resizeWindow("Parameters", 640, 240)
+    cv2.createTrackbar("Threshold1", "Parameters", 89, 255, empty)
+    cv2.createTrackbar("Threshold2", "Parameters", 0, 255, empty)
+    cv2.createTrackbar("Area", "Parameters", 2500, 30000, empty)
+
+
+create_cv_windows()
 frame = None
 while frame is None or frame.mean() < 10:  # Check for black frame
     frame = me.get_frame_read().frame
     print("NO FRAME!")
     time.sleep(0.1)
-
-cv2.namedWindow("HSV")
-cv2.resizeWindow("HSV", 640, 240)
-cv2.createTrackbar("HUE Min", "HSV", 117, 179, empty)
-cv2.createTrackbar("HUE Max", "HSV", 132, 179, empty)
-cv2.createTrackbar("SAT Min", "HSV", 208, 255, empty)
-cv2.createTrackbar("SAT Max", "HSV", 255, 255, empty)
-cv2.createTrackbar("VALUE Min", "HSV", 0, 255, empty)
-cv2.createTrackbar("VALUE Max", "HSV", 210, 255, empty)
-
-cv2.namedWindow("Parameters")
-cv2.resizeWindow("Parameters", 640, 240)
-cv2.createTrackbar("Threshold1", "Parameters", 89, 255, empty)
-cv2.createTrackbar("Threshold2", "Parameters", 0, 255, empty)
-cv2.createTrackbar("Area", "Parameters", 2500,30000, empty)
-
 
 while True:
     # GET THE IMAGE FROM TELLO
@@ -276,8 +281,6 @@ while True:
     #     me.takeoff()
     #     time.sleep(1)
     #     startCounter = 1
-
-
 
     # SEND VELOCITY VALUES TO TELLO
 
