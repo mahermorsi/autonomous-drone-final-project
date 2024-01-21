@@ -3,11 +3,10 @@ import cv2
 import numpy as np
 
 
-
 # cap = cv2.VideoCapture(0)
 def detect(img):
     # Get img shape
-    model = YOLO('../yolo-weights/yolov8m-seg.pt')
+    model = YOLO("../yolo-weights/yolov8m-seg.pt")
     height, width, channels = img.shape
     results = model.predict(source=img.copy(), save=False, save_txt=False)
     result = results[0]
@@ -42,4 +41,3 @@ def draw_contour_on_objects(img):
 #
 #     success, img = cap.read()
 #     draw_contour_on_objects(img)
-

@@ -7,7 +7,9 @@ import cv2
 
 
 class RRT:
-    def __init__(self, start, goal, obstacles, image_size, step_size=100, max_iterations=1000):
+    def __init__(
+        self, start, goal, obstacles, image_size, step_size=100, max_iterations=1000
+    ):
         self.start = start
         self.goal = goal
         self.obstacles = obstacles
@@ -50,7 +52,9 @@ class RRT:
         x = np.clip(x, 0, self.image_size[1] - 1)
         y = np.clip(y, 0, self.image_size[0] - 1)
         for i in range(len(x)):
-            if np.all(self.obstacles[y[i], x[i]] == 0):  # Check if any obstacle is present at coordinates
+            if np.all(
+                self.obstacles[y[i], x[i]] == 0
+            ):  # Check if any obstacle is present at coordinates
                 return False
         return True
 
@@ -72,16 +76,20 @@ class RRT:
             if self.euclidean_distance(new_point, self.goal) <= self.step_size:
                 self.tree[self.goal] = new_point
                 ax.clear()
-                path=self.construct_path()
-                ax.imshow(self.obstacles, cmap='gray')
-                ax.plot([point[0] for point in path], [point[1] for point in path], 'r-')
-                ax.plot(self.start[0], self.start[1], 'go', markersize=5)
-                ax.plot(self.goal[0], self.goal[1], 'bo', markersize=5)
+                path = self.construct_path()
+                ax.imshow(self.obstacles, cmap="gray")
+                ax.plot(
+                    [point[0] for point in path], [point[1] for point in path], "r-"
+                )
+                ax.plot(self.start[0], self.start[1], "go", markersize=5)
+                ax.plot(self.goal[0], self.goal[1], "bo", markersize=5)
                 ax.set_title("RRT Path Planning (Iteration: {})".format(_ + 1))
                 plt.pause(0.01)
                 return path
             consecutive_failures += 1
-            if consecutive_failures >= 50:  # Adjust this value based on your requirements
+            if (
+                consecutive_failures >= 50
+            ):  # Adjust this value based on your requirements
                 print("Failed to find a path within consecutive failures limit.")
                 break
 
@@ -99,26 +107,27 @@ class RRT:
         return path
 
 
-
 def find_RRT_path(objects_image_path):
     # Load image
 
     # start = get_start_coordination.find_yellow_pixel(path_of_yellow_img)
     # image_path = white_mask.filter_colors(objects_image_path)
-    image = Image.open(objects_image_path).convert('1')  # Convert to black and white
+    image = Image.open(objects_image_path).convert("1")  # Convert to black and white
     image_array = np.array(image)
-    obstacles = np.where(image_array == 0, 0, 1)  # 0 represents obstacles, 1 represents path
+    obstacles = np.where(
+        image_array == 0, 0, 1
+    )  # 0 represents obstacles, 1 represents path
 
     plot_thread = threading.Thread(target=plot_image, args=(obstacles,))
     plot_thread.start()
     start_x = int(input("Enter start x-coordinate: "))
     start_y = int(input("Enter start y-coordinate: "))
     start = (start_x, start_y)
-    plt.plot(start_x, start_y, 'go', markersize=5, label='Start')
+    plt.plot(start_x, start_y, "go", markersize=5, label="Start")
 
     end_x = int(input("Enter end x-coordinate: "))
     end_y = int(input("Enter end y-coordinate: "))
-    plt.plot(end_x, end_y, 'bo', markersize=5, label='Goal')
+    plt.plot(end_x, end_y, "bo", markersize=5, label="Goal")
     goal = (end_x, end_y)
     plot_thread.join()
     # print(image_array.shape)
@@ -132,10 +141,10 @@ def find_RRT_path(objects_image_path):
     if path:
         print("Path found!")
         # Visualize path
-        plt.imshow(image_array, cmap='gray')
-        plt.plot([point[0] for point in path], [point[1] for point in path], 'r-')
-        plt.plot(start[0], start[1], 'go', markersize=5)
-        plt.plot(goal[0], goal[1], 'bo', markersize=5)
+        plt.imshow(image_array, cmap="gray")
+        plt.plot([point[0] for point in path], [point[1] for point in path], "r-")
+        plt.plot(start[0], start[1], "go", markersize=5)
+        plt.plot(goal[0], goal[1], "bo", markersize=5)
         plt.title("RRT Path Planning")
         plt.savefig("final_path.png")
         plot_image(image_array)
@@ -144,17 +153,16 @@ def find_RRT_path(objects_image_path):
         print("Failed to find a path.")
 
 
-
 def plot_image(img):
     if img is None:
         print("Input image is None. Cannot plot.")
         return
 
     try:
-        plt.imshow(img, cmap='gray')
+        plt.imshow(img, cmap="gray")
         plt.show()
     except Exception as e:
         print(f"Error in plot_image function: {e}")
 
 
-find_RRT_path('masked_image.png')
+find_RRT_path("masked_image.png")
