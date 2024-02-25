@@ -13,6 +13,7 @@ height = 480  # HEIGHT OF THE IMAGE
 deadZone = 45  # initially it was 100
 startCounter = 0
 global imgContour
+isHeightCorrect = 0
 ######################################################################
 
 
@@ -41,7 +42,7 @@ thread_is_processing = False
 
 def detect_objects(img):
     # Get img shape
-    model = YOLO('../yolo-weights/yolov8l-seg.pt')
+    model = YOLO('yolo-weights/yolov8l-seg.pt')
     height, width, channels = img.shape
     results = model.predict(source=img.copy(), save=False, save_txt=False)
     result = results[0]
@@ -64,7 +65,7 @@ def detect_objects(img):
 def draw_contour_on_objects(img):
     if img is None:
         print("Input image is None. Exiting function.")
-        return
+        return 0
 
     try:
         global thread_is_processing
@@ -133,8 +134,9 @@ def stackImages(scale, imgArray):
     return ver
 
 
-def getContours(img, imgContour):
+def get_contours_control_drone(img, imgContour):
     contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    global isHeightCorrect
     for cnt in contours:
         area = cv2.contourArea(cnt)
         areaMin = cv2.getTrackbarPos("Area", "Parameters")
@@ -157,6 +159,7 @@ def getContours(img, imgContour):
             else:
                 me.for_back_velocity = 0
 
+
             if (cx < int(frameWidth / 2) - deadZone):
                 cv2.putText(imgContour, " ROTATE LEFT ", (20, 200), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 3)
                 cv2.rectangle(imgContour, (0, int(frameHeight / 2 - deadZone)),
@@ -176,13 +179,13 @@ def getContours(img, imgContour):
                 me.yaw_velocity = 0
 
             height = me.get_height()
-            if (height < 140):
+            if (height < 140 and not isHeightCorrect):
                 me.up_down_velocity = 20
                 cv2.putText(imgContour, "GO UP || height is: " + str(height), (500, 50), cv2.FONT_HERSHEY_COMPLEX, 1,
                             (0, 0, 255), 3)
             #        cv2.rectangle(imgContour,(int(frameWidth/2-deadZone),0),(int(frameWidth/2+deadZone),int(frameHeight/2)-deadZone),(0,0,255),cv2.FILLED)
 
-            elif (height > 150):
+            elif (height > 150 and not isHeightCorrect):
                 me.up_down_velocity = -20
                 cv2.putText(imgContour, "GO DOWN || height is: " + str(height), (500, 50), cv2.FONT_HERSHEY_COMPLEX, 1,
                             (0, 0, 255), 3)
@@ -190,6 +193,7 @@ def getContours(img, imgContour):
 
             else:
                 me.up_down_velocity = 0
+                isHeightCorrect = 1
 
             cv2.line(imgContour, (int(frameWidth / 2), int(frameHeight / 2)), (cx, cy), (0, 0, 255), 3)
             cv2.rectangle(imgContour, (x, y), (x + w, y + h), (0, 255, 0), 5)
@@ -272,7 +276,7 @@ while True:
     imgCanny = cv2.Canny(imgGray, threshold1, threshold2)
     kernel = np.ones((5, 5))
     imgDil = cv2.dilate(imgCanny, kernel, iterations=1)
-    getContours(imgDil, imgContour)
+    get_contours_control_drone(imgDil, imgContour)
     display(imgContour)
 
     ################# FLIGHT
