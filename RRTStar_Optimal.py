@@ -41,7 +41,7 @@ def calculate_distance(point1, point2):
     return math.sqrt((point1.x - point2.x) ** 2 + (point1.y - point2.y) ** 2)
 
 
-def rrt_star(start, goal, img, max_iter=1000, delta=10, radius=10):
+def rrt_star(start, goal, img, max_iter=2000, delta=10, radius=10):
     img_height, img_width = img.shape
     nodes = [start]
 
@@ -56,9 +56,9 @@ def rrt_star(start, goal, img, max_iter=1000, delta=10, radius=10):
         if img[new_point.y, new_point.x] == 0:
             continue  # Skip if the new point is in an obstacle
 
-        if img[optimal_point.y, optimal_point.x] != 0:
-            new_point.x = optimal_point.x
-            new_point.y = optimal_point.y
+        # if img[optimal_point.y, optimal_point.x] != 0:
+        #     new_point.x = optimal_point.x
+        #     new_point.y = optimal_point.y
 
         near_nodes = [node for node in nodes if calculate_distance(node, new_point) <= radius]
 
