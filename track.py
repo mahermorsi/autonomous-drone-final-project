@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from djitellopy import Tello
 from ultralytics import YOLO
-from RRT_Star_Beta import find_rrt_path
+from RRTStar_New import find_rrt_path
 from mask_white import convert_non_black_to_white
 
 ######################################################################
@@ -62,7 +62,7 @@ def detect_objects(img):
     return bboxes, class_ids, segmentation_contours_idx, scores
 
 
-def draw_contour_on_objects(img):
+def calculate_rrt_path(img, start_point):
     if img is None:
         print("Input image is None. Exiting function.")
         return 0
@@ -85,7 +85,7 @@ def draw_contour_on_objects(img):
         cv2.imwrite(drone_frame_path, img)
         filtered_image_path = convert_non_black_to_white(drone_frame_path)
         if filtered_image_path:
-            find_rrt_path(filtered_image_path)
+            find_rrt_path(filtered_image_path, start_point)
         else:
             print("convert_non_black_to_white returned None. Unable to proceed.")
 
@@ -101,7 +101,7 @@ def empty(a):
     pass
 
 
-def stackImages(scale, imgArray):
+def stack_images(scale, imgArray):
     rows = len(imgArray)
     cols = len(imgArray[0])
     rowsAvailable = isinstance(imgArray[0], list)
@@ -134,7 +134,30 @@ def stackImages(scale, imgArray):
     return ver
 
 
-def get_contours_control_drone(img, imgContour):
+def get_start_point_from_contour(img):
+    contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    min_x = float('inf')
+    min_y = float('inf')
+
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        area_min = cv2.getTrackbarPos("Area", "Parameters")
+        if area < area_min:
+            continue
+        for point in contour:
+            x, y = point[0]
+            min_x = min(min_x, x)
+            min_y = min(min_y, y)
+
+    # If no points found, return None
+    if min_x == float('inf') or min_y == float('inf'):
+        return None
+
+    # Return the smallest x and y coordinates found
+    return min_x, min_y
+
+
+def control_drone(img, imgContour):
     contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     global isHeightCorrect
     for cnt in contours:
@@ -148,11 +171,11 @@ def get_contours_control_drone(img, imgContour):
             x, y, w, h = cv2.boundingRect(approx)
             cx = int(x + (w / 2))  # CENTER X OF THE OBJECT
             cy = int(y + (h / 2))  # CENTER Y OF THE OBJECT
-            if (area < 11000):
+            if (area < 4000):
                 cv2.putText(imgContour, " GET CLOSER ", (20, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 3)
                 me.for_back_velocity = 30
 
-            elif (area > 15000):
+            elif (area > 7000):
                 cv2.putText(imgContour, " GET FURTHER ", (20, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 3)
                 me.for_back_velocity = -30
 
@@ -227,7 +250,46 @@ def create_cv_windows():
     cv2.resizeWindow("Parameters", 640, 240)
     cv2.createTrackbar("Threshold1", "Parameters", 89, 255, empty)
     cv2.createTrackbar("Threshold2", "Parameters", 0, 255, empty)
-    cv2.createTrackbar("Area", "Parameters", 2500, 30000, empty)
+    cv2.createTrackbar("Area", "Parameters", 2000, 20000, empty)
+
+    cv2.namedWindow("RRT* Path Planning")
+    cv2.resizeWindow("RRT* Path Planning", 640, 480)
+
+
+def get_trackbar_values():
+    h_min = cv2.getTrackbarPos("HUE Min", "HSV")
+    h_max = cv2.getTrackbarPos("HUE Max", "HSV")
+    s_min = cv2.getTrackbarPos("SAT Min", "HSV")
+    s_max = cv2.getTrackbarPos("SAT Max", "HSV")
+    v_min = cv2.getTrackbarPos("VALUE Min", "HSV")
+    v_max = cv2.getTrackbarPos("VALUE Max", "HSV")
+    return h_min, h_max, s_min, s_max, v_min, v_max
+
+
+def preprocess_image(frame, width, height):
+    img = cv2.resize(frame, (width, height))
+    imgHsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    return img, imgHsv
+
+
+def filter_image(img, lower, upper):
+    mask = cv2.inRange(img, lower, upper)
+    result = cv2.bitwise_and(img, img, mask=mask)
+    mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+    return result, mask
+
+
+def process_image(img):
+    imgBlur = cv2.GaussianBlur(img, (7, 7), 1)
+    imgGray = cv2.cvtColor(imgBlur, cv2.COLOR_BGR2GRAY)
+    return imgGray
+
+
+def detect_edges(img, threshold1, threshold2):
+    imgCanny = cv2.Canny(img, threshold1, threshold2)
+    kernel = np.ones((5, 5))
+    imgDil = cv2.dilate(imgCanny, kernel, iterations=1)
+    return imgDil
 
 
 create_cv_windows()
@@ -242,42 +304,33 @@ while True:
     frame_read = me.get_frame_read()
     myFrame = frame_read.frame
 
-    img = cv2.resize(myFrame, (width, height))
+    img, imgHsv = preprocess_image(myFrame, width, height)
     imgContour = img.copy()
     objectsImage = img.copy()
+
+    h_min, h_max, s_min, s_max, v_min, v_max = get_trackbar_values()
+    lower = np.array([h_min, s_min, v_min])
+    upper = np.array([h_max, s_max, v_max])
+
+    result, mask = filter_image(imgHsv, lower, upper)
+    imgGray = process_image(result)
+
+    threshold1 = cv2.getTrackbarPos("Threshold1", "Parameters")
+    threshold2 = cv2.getTrackbarPos("Threshold2", "Parameters")
+    imgDil = detect_edges(imgGray, threshold1, threshold2)
+
+    control_drone(imgDil, imgContour)
+    display(imgContour)
 
     # execute RRT algorithm only if R key is pressed
     key = cv2.waitKey(1) & 0xFF
     if key == ord('r') or key == ord('R'):
         with lock:
             if not thread_is_processing:
-                t = threading.Thread(target=draw_contour_on_objects, args=(objectsImage,))
+                start_point = get_start_point_from_contour(imgDil)
+                t = threading.Thread(target=calculate_rrt_path, args=(objectsImage, start_point,))
                 t.daemon = True
                 t.start()
-
-    imgHsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    h_min = cv2.getTrackbarPos("HUE Min", "HSV")
-    h_max = cv2.getTrackbarPos("HUE Max", "HSV")
-    s_min = cv2.getTrackbarPos("SAT Min", "HSV")
-    s_max = cv2.getTrackbarPos("SAT Max", "HSV")
-    v_min = cv2.getTrackbarPos("VALUE Min", "HSV")
-    v_max = cv2.getTrackbarPos("VALUE Max", "HSV")
-
-    lower = np.array([h_min, s_min, v_min])
-    upper = np.array([h_max, s_max, v_max])
-    mask = cv2.inRange(imgHsv, lower, upper)
-    result = cv2.bitwise_and(img, img, mask=mask)
-    mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-
-    imgBlur = cv2.GaussianBlur(result, (7, 7), 1)
-    imgGray = cv2.cvtColor(imgBlur, cv2.COLOR_BGR2GRAY)
-    threshold1 = cv2.getTrackbarPos("Threshold1", "Parameters")
-    threshold2 = cv2.getTrackbarPos("Threshold2", "Parameters")
-    imgCanny = cv2.Canny(imgGray, threshold1, threshold2)
-    kernel = np.ones((5, 5))
-    imgDil = cv2.dilate(imgCanny, kernel, iterations=1)
-    get_contours_control_drone(imgDil, imgContour)
-    display(imgContour)
 
     ################# FLIGHT
 
@@ -291,7 +344,7 @@ while True:
     # if me.send_rc_control:
     #     me.send_rc_control(me.left_right_velocity, me.for_back_velocity, me.up_down_velocity, me.yaw_velocity)
 
-    stack = stackImages(0.9, ([img, result], [imgDil, imgContour]))
+    stack = stack_images(0.9, ([img, result], [imgDil, imgContour]))
     cv2.imshow('Horizontal Stacking', stack)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
