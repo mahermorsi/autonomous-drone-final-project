@@ -141,7 +141,7 @@ def find_goal_point(image_array, img_width):
     for row in range(goal_row_start, goal_row_end + 1):
         for col in range(goal_col_start, goal_col_end + 1):
             if image_array[row][col] == 1:  # Checking if the pixel is white
-                return row , col
+                return row, col
     return
 
 
@@ -172,4 +172,4 @@ def find_rrt_path(image_path, start_point):
         print("path was not found!")
 
 
-# find_rrt_path('example screenshots/masked_image.png')
+# find_rrt_path('example screenshots/masked_image.png', (500,300))
