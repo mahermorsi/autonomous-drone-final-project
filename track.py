@@ -291,6 +291,11 @@ def detect_edges(img, threshold1, threshold2):
     imgDil = cv2.dilate(imgCanny, kernel, iterations=1)
     return imgDil
 
+def get_thresholds():
+    threshold1 = cv2.getTrackbarPos("Threshold1", "Parameters")
+    threshold2 = cv2.getTrackbarPos("Threshold2", "Parameters")
+    return threshold1, threshold2
+
 
 create_cv_windows()
 frame = None
@@ -315,8 +320,7 @@ while True:
     result, mask = filter_image(imgHsv, lower, upper)
     imgGray = process_image(result)
 
-    threshold1 = cv2.getTrackbarPos("Threshold1", "Parameters")
-    threshold2 = cv2.getTrackbarPos("Threshold2", "Parameters")
+    threshold1, threshold2 = get_thresholds()
     imgDil = detect_edges(imgGray, threshold1, threshold2)
 
     control_drone(imgDil, imgContour)
