@@ -109,25 +109,29 @@ def plot_cv2_path(obstacles, path, start, goal):
     cv2.circle(image_color, tuple(goal), 5, (0, 255, 0), -1)
 
     # Add labels for start and goal
-    cv2.putText(image_color, 'Start', tuple(start), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-    cv2.putText(image_color, 'Goal', tuple(goal), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    cv2.putText(image_color, 'Starting position', tuple(start), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+    cv2.putText(image_color, 'Destination point', tuple(goal), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 
     # Save image
-    cv2.imwrite('final_rrt_path.jpg', image_color)
+    cv2.imwrite('final path.jpg', image_color)
     # Display image
-    cv2.imshow("RRT* Path Planning", image_color)
+    # cv2.imshow("RRT* Path Planning", image_color)
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
 
 def plot_path(image, path, start, goal):
     plt.imshow(image, cmap="gray")
     path = np.array(path)
-    plt.plot(path[:, 0], path[:, 1], "g.-")
-    plt.plot(start[0], start[1], 'bo', label='Start')
-    plt.plot(goal[0], goal[1], 'go', label='Goal')
+    plt.plot(path[:, 0], path[:, 1], "g.-", label='Path')
+    plt.plot(start[0], start[1], 'bo', label='Starting position')
+    plt.plot(goal[0], goal[1], 'ro', label='Destination point')
+    plt.text(start[0]-65, start[1]+25, 'User', color='blue', fontsize=12, verticalalignment='bottom')
+    plt.text(goal[0], goal[1], 'Destination', color='red', fontsize=12, verticalalignment='bottom')
+
+    plt.legend()
     plt.title("RRT* Path Planning")
-    plt.savefig("final path.png")
-    plt.show()
+    plt.savefig("final path.jpg")
+    # plt.show()
 
 
 
@@ -173,3 +177,6 @@ def find_rrt_path(image_path, start_point):
 
 
 # find_rrt_path('example screenshots/masked_image.png', (500,300))
+# img=cv2.imread('final path.png')
+# cv2.imshow('rrt track',img)
+# cv2.waitKey(0)
