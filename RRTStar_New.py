@@ -113,7 +113,7 @@ def plot_cv2_path(obstacles, path, start, goal):
     cv2.putText(image_color, 'Destination point', tuple(goal), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 
     # Save image
-    cv2.imwrite('final path.jpg', image_color)
+    cv2.imwrite('image results/final path.jpg', image_color)
     # Display image
     # cv2.imshow("RRT* Path Planning", image_color)
     # cv2.waitKey(0)

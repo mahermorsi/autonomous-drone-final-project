@@ -7,6 +7,7 @@ from ultralytics import YOLO
 from RRTStar_New import find_rrt_path
 from mask_white import convert_non_black_to_white
 import datetime
+import multiprocessing
 
 ######################################################################
 width = 640  # WIDTH OF THE IMAGE
@@ -18,20 +19,7 @@ isHeightCorrect = 0
 ######################################################################
 
 
-# CONNECT TO TELLO
-me = Tello()
-me.connect()
-me.for_back_velocity = 0
-me.left_right_velocity = 0
-me.up_down_velocity = 0
-me.yaw_velocity = 0
-me.speed = 0
-me.TIME_BTW_RC_CONTROL_COMMANDS = 0.1
 
-print(me.get_battery())
-
-me.streamoff()
-me.streamon()
 ########################
 
 frameWidth = width
@@ -41,7 +29,7 @@ lock = threading.Lock()  # lock until the function completes its job, before rec
 thread_is_processing = False
 
 
-def reset_drone_engines():
+def reset_drone_engines(me):
     me.for_back_velocity = 0
     me.left_right_velocity = 0
     me.up_down_velocity = 0
@@ -75,9 +63,6 @@ def calculate_rrt_path(img, start_point):
         return 0
 
     try:
-        global thread_is_processing
-        with lock:
-            thread_is_processing = True
         # bboxes, classes, segmentations, scores = detect_objects(img)
         # for bbox, class_id, seg, score in zip(bboxes, classes, segmentations, scores):
         segmentations = detect_objects(img)
@@ -90,7 +75,7 @@ def calculate_rrt_path(img, start_point):
             except Exception as e_inner:
                 print(f"Error while processing object: {e_inner}")
 
-        drone_frame_path = "captured_image.jpg"
+        drone_frame_path = "image results/captured_image.jpg"
         cv2.imwrite(drone_frame_path, img)
         filtered_image_path = convert_non_black_to_white(drone_frame_path)
         if filtered_image_path:
@@ -100,10 +85,6 @@ def calculate_rrt_path(img, start_point):
 
     except Exception as e_outer:
         print(f"Error in draw_contour_on_objects function: {e_outer}")
-
-    finally:
-        with lock:
-            thread_is_processing = False
 
 
 def empty(a):
@@ -166,7 +147,7 @@ def get_start_point_from_contour(img):
     return min_x, min_y
 
 
-def control_drone(img, imgContour):
+def control_drone(img, imgContour, me):
     contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     global isHeightCorrect
     for cnt in contours:
@@ -181,11 +162,11 @@ def control_drone(img, imgContour):
             cx = int(x + (w / 2))  # CENTER X OF THE OBJECT
             cy = int(y + (h / 2))  # CENTER Y OF THE OBJECT
             if (area < 3000):
-                cv2.putText(imgContour, "FORWARD", (int(frameWidth/2 - deadZone+20), int(frameHeight/2 - 2*deadZone)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (0, 0, 255), 2)
+                cv2.putText(imgContour, "FORWARD", (int(frameWidth/2 - deadZone+20), int(frameHeight/2 - 2*deadZone)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
                 me.for_back_velocity = 35
 
             elif (area > 4000):
-                cv2.putText(imgContour, "BACKWARD", (int(frameWidth/2 - deadZone+10), int(frameHeight/2 + 2*deadZone)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (0, 0, 255), 2)
+                cv2.putText(imgContour, "BACKWARD", (int(frameWidth/2 - deadZone+10), int(frameHeight/2 + 2*deadZone)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
                 me.for_back_velocity = -30
 
             else:
@@ -193,16 +174,15 @@ def control_drone(img, imgContour):
 
 
             if (cx < int(frameWidth / 2) - deadZone):
-                cv2.putText(imgContour, " <- ROTATE LEFT <-", (10, int(frameHeight/2)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (0, 0, 255), 2)
+                cv2.putText(imgContour, " <- ROTATE LEFT <-", (10, int(frameHeight/2)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
                 # cv2.rectangle(imgContour, (0, int(frameHeight / 2 - deadZone)),
                 #               (int(frameWidth / 2) - deadZone, int(frameHeight / 2) + deadZone), (0, 0, 255),
                 #               cv2.FILLED)
 
                 me.yaw_velocity = -20
 
-
             elif (cx > int(frameWidth / 2) + deadZone):
-                cv2.putText(imgContour, "-> ROTATE RIGHT ->", (int(frameWidth/2 + deadZone)+10, int(frameHeight/2)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (0, 0, 255), 2)
+                cv2.putText(imgContour, "-> ROTATE RIGHT ->", (int(frameWidth/2 + deadZone)+10, int(frameHeight/2)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
                 # cv2.rectangle(imgContour, (int(frameWidth / 2 + deadZone), int(frameHeight / 2 - deadZone)),(frameWidth, int(frameHeight / 2) + deadZone), (0, 0, 255), cv2.FILLED)
 
                 me.yaw_velocity = 20
@@ -213,33 +193,34 @@ def control_drone(img, imgContour):
             if (height < 330 and not isHeightCorrect):
                 me.up_down_velocity = 30
                 cv2.putText(imgContour, "GO UP || height is: " + str(height), (20,20), cv2.FONT_HERSHEY_COMPLEX, 0.6,
-                            (0, 0, 255), 2)
+                            (255, 0, 0), 2)
             #        cv2.rectangle(imgContour,(int(frameWidth/2-deadZone),0),(int(frameWidth/2+deadZone),int(frameHeight/2)-deadZone),(0,0,255),cv2.FILLED)
 
             elif (height > 340 and not isHeightCorrect):
                 me.up_down_velocity = -30
                 cv2.putText(imgContour, "GO DOWN || height is: " + str(height), (20,20), cv2.FONT_HERSHEY_COMPLEX, 0.6,
-                            (0, 0, 255), 2)
+                            (255, 0, 0), 2)
             #        cv2.rectangle(imgContour,(int(frameWidth/2-deadZone),int(frameHeight/2)+deadZone),(int(frameWidth/2+deadZone),frameHeight),(0,0,255),cv2.FILLED)
 
             else:
                 me.up_down_velocity = 0
                 isHeightCorrect = 1
 
-            cv2.line(imgContour, (int(frameWidth / 2), int(frameHeight / 2)), (cx, cy), (0, 0, 255), 3)
+            cv2.line(imgContour, (int(frameWidth / 2), int(frameHeight / 2)), (cx, cy), (255, 0, 0), 3)
             cv2.rectangle(imgContour, (x, y), (x + w, y + h), (0, 255, 0), 5)
             # cv2.putText(imgContour, "Points: " + str(len(approx)), (x + w + 20, y + 20), cv2.FONT_HERSHEY_COMPLEX, .7,(0, 255, 0), 2)
             cv2.putText(imgContour, "Area: " + str(int(area)), (x + w + 20, y + 45), cv2.FONT_HERSHEY_COMPLEX, 0.7,(0, 255, 0), 2)
             # cv2.putText(imgContour, " " + str(int(x)) + " " + str(int(y)), (x - 20, y - 45), cv2.FONT_HERSHEY_COMPLEX,0.7, (0, 255, 0), 2)
             break
+    return me.left_right_velocity, me.for_back_velocity, me.up_down_velocity, me.yaw_velocity
 
 
 def display(img):
-    cv2.line(img, (int(frameWidth / 2) - deadZone, 0), (int(frameWidth / 2) - deadZone, frameHeight), (255, 255, 0), 3)
-    cv2.line(img, (int(frameWidth / 2) + deadZone, 0), (int(frameWidth / 2) + deadZone, frameHeight), (255, 255, 0), 3)
-    cv2.circle(img, (int(frameWidth / 2), int(frameHeight / 2)), 5, (0, 0, 255), 5)
-    cv2.line(img, (0, int(frameHeight / 2) - deadZone), (frameWidth, int(frameHeight / 2) - deadZone), (255, 255, 0), 3)
-    cv2.line(img, (0, int(frameHeight / 2) + deadZone), (frameWidth, int(frameHeight / 2) + deadZone), (255, 255, 0), 3)
+    cv2.line(img, (int(frameWidth / 2) - deadZone, 0), (int(frameWidth / 2) - deadZone, frameHeight), (0, 255, 255), 3)
+    cv2.line(img, (int(frameWidth / 2) + deadZone, 0), (int(frameWidth / 2) + deadZone, frameHeight), (0, 255, 255), 3)
+    cv2.circle(img, (int(frameWidth / 2), int(frameHeight / 2)), 5, (255, 0, 0), 5)
+    cv2.line(img, (0, int(frameHeight / 2) - deadZone), (frameWidth, int(frameHeight / 2) - deadZone), (0, 255, 255), 3)
+    cv2.line(img, (0, int(frameHeight / 2) + deadZone), (frameWidth, int(frameHeight / 2) + deadZone), (0, 255, 255), 3)
 
 
 def create_cv_windows():
@@ -303,73 +284,101 @@ def get_thresholds():
     return threshold1, threshold2
 
 
-create_cv_windows()
-frame = None
-while frame is None or frame.mean() < 10:  # Check for black frame
-    frame = me.get_frame_read().frame
-    print("NO FRAME!")
-    time.sleep(0.1)
+def worker(args):
+    # Your worker function logic here
+    objectsImage, start_point = args
+    calculate_rrt_path(objectsImage, start_point)
 
-execution_time = time.time()
-while True:
-    # GET THE IMAGE FROM TELLO
-    frame_read = me.get_frame_read()
-    myFrame = frame_read.frame
 
-    img, imgHsv = preprocess_image(myFrame, width, height)
-    imgContour = img.copy()
-    objectsImage = img.copy()
+def main():
+    pool = multiprocessing.Pool()
+    # CONNECT TO TELLO
+    me = Tello()
+    me.connect()
+    me.for_back_velocity = 0
+    me.left_right_velocity = 0
+    me.up_down_velocity = 0
+    me.yaw_velocity = 0
+    me.speed = 0
+    me.TIME_BTW_RC_CONTROL_COMMANDS = 0.1
 
-    h_min, h_max, s_min, s_max, v_min, v_max = get_trackbar_values()
-    lower = np.array([h_min, s_min, v_min])
-    upper = np.array([h_max, s_max, v_max])
+    print(me.get_battery())
 
-    result, mask = filter_image(imgHsv, lower, upper)
-    imgGray = process_image(result)
+    me.streamoff()
+    me.streamon()
+    create_cv_windows()
+    frame = None
+    while frame is None or frame.mean() < 10:  # Check for black frame
+        frame = me.get_frame_read().frame
+        print("NO FRAME!")
+        time.sleep(0.1)
 
-    threshold1, threshold2 = get_thresholds()
-    imgDil = detect_edges(imgGray, threshold1, threshold2)
+    execution_time = time.time()
+    while True:
+        # GET THE IMAGE FROM TELLO
+        frame_read = me.get_frame_read()
+        myFrame = frame_read.frame
 
-    control_drone(imgDil, imgContour)
-    display(imgContour)
+        img, imgHsv = preprocess_image(myFrame, width, height)
+        imgContour = img.copy()
+        objectsImage = img.copy()
 
-    current_time = time.time()
-    if current_time - execution_time >= 30:
-        reset_drone_engines()
-        me.send_rc_control(me.left_right_velocity, me.for_back_velocity, me.up_down_velocity, me.yaw_velocity)
-        execution_time = current_time
-        with lock:
-            if not thread_is_processing:
-                start_point = get_start_point_from_contour(imgDil)
-                print(start_point)
-                t = threading.Thread(target=calculate_rrt_path, args=(objectsImage, start_point,))
-                t.daemon = True
-                t.start()
+        h_min, h_max, s_min, s_max, v_min, v_max = get_trackbar_values()
+        lower = np.array([h_min, s_min, v_min])
+        upper = np.array([h_max, s_max, v_max])
 
-    ################# FLIGHT
+        result, mask = filter_image(imgHsv, lower, upper)
+        imgGray = process_image(result)
 
-    # if startCounter == 0:
-    #     me.takeoff()
-    #     time.sleep(1)
-    #     startCounter = 1
-    #
-    # # SEND VELOCITY VALUES TO TELLO
-    #
-    # if me.send_rc_control:
-    #     me.send_rc_control(me.left_right_velocity, me.for_back_velocity, me.up_down_velocity, me.yaw_velocity)
+        threshold1, threshold2 = get_thresholds()
+        imgDil = detect_edges(imgGray, threshold1, threshold2)
 
-    # stack = stack_images(0.9, ([img, result], [imgDil, imgContour]))
-    # cv2.imshow('Horizontal Stacking', stack)
-    cv2.imshow('user track', imgContour)
-    rrt_image = cv2.imread("final path.jpg")
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cv2.putText(rrt_image, timestamp, (10, rrt_image.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-    cv2.imshow("RRT* Path Planning",rrt_image)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        me.land()
-        me.end()
-        # for thr in threads:
-        #     thr.join()
-        break
+        me.left_right_velocity, me.for_back_velocity, me.up_down_velocity, me.yaw_velocity  =control_drone(imgDil, imgContour, me)
+        display(imgContour)
 
-cv2.destroyAllWindows()
+        current_time = time.time()
+        if current_time - execution_time >= 30:
+            execution_time = current_time
+            start_point = get_start_point_from_contour(imgDil)
+            print(start_point)
+            pool.apply_async(worker, args=((objectsImage, start_point),))
+
+        ################# FLIGHT
+
+        # if startCounter == 0:
+        #     me.takeoff()
+        #     time.sleep(1)
+        #     startCounter = 1
+        #
+        # # SEND VELOCITY VALUES TO TELLO
+        #
+        # if me.send_rc_control:
+        #     me.send_rc_control(me.left_right_velocity, me.for_back_velocity, me.up_down_velocity, me.yaw_velocity)
+
+        # stack = stack_images(0.9, ([img, result], [imgDil, imgContour]))
+        # cv2.imshow('Horizontal Stacking', stack)
+        image_bgr = cv2.cvtColor(imgContour, cv2.COLOR_RGB2BGR)
+        cv2.imshow('user track', image_bgr)
+        try:
+            rrt_image = cv2.imread("image results/final path.jpg")
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cv2.putText(rrt_image, timestamp, (10, rrt_image.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255),2)
+            cv2.imshow("RRT* Path Planning", rrt_image)
+            if rrt_image is None:
+                raise FileNotFoundError("Image file not found or unable to read.")
+        except FileNotFoundError as e:
+            print(e)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            me.land()
+            me.end()
+
+            break
+
+    cv2.destroyAllWindows()
+    pool.close()
+    pool.join()
+
+
+if __name__ == '__main__':
+    main()
