@@ -1,9 +1,9 @@
 cvzone==1.5.6
-ultralytics==8.0.26
+ultralytics~=8.1.2
 hydra-core>=1.2.0
 matplotlib>=3.2.2
 numpy>=1.18.5
-opencv-python==4.5.4.60
+opencv-python~=4.9.0.80
 Pillow>=7.1.2
 PyYAML>=5.3.1
 requests>=2.23.0
@@ -14,4 +14,13 @@ tqdm>=4.64.0
 filterpy==1.4.5
 #scikit-image==0.19.3
 lap==0.4.0
-djitellopy==1.0
+djitellopy~=2.5.0
+supervision~=0.4.0
+groundingdino~=0.1.0
+setuptools~=68.2.0
+transformers~=4.38.2
+addict~=2.4.0
+yapf~=0.40.2
+pycocotools~=2.0.7
+timm~=0.9.16
+onnxruntime~=1.17.1
