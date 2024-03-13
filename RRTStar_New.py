@@ -109,10 +109,11 @@ def plot_cv2_path(obstacles, path, start, goal):
     cv2.circle(image_color, tuple(goal), 5, (0, 255, 0), -1)
 
     # Add labels for start and goal
-    cv2.putText(image_color, 'Starting position', tuple(start), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+    cv2.putText(image_color, 'User position', tuple(start), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
     cv2.putText(image_color, 'Destination point', tuple(goal), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 
     # Save image
+
     cv2.imwrite('image results/final path.jpg', image_color)
     # Display image
     # cv2.imshow("RRT* Path Planning", image_color)
@@ -130,12 +131,12 @@ def plot_path(image, path, start, goal):
 
     plt.legend()
     plt.title("RRT* Path Planning")
-    plt.savefig("final path.jpg")
+    plt.savefig("image results/final path.jpg")
     # plt.show()
 
 
 
-def find_goal_point(image_array, img_width):
+def create_temp_goal_point(image_array, img_width):
     goal_row_start = 10
     goal_row_end = 30
     goal_col_start = int(img_width / 2) - 50
@@ -149,17 +150,13 @@ def find_goal_point(image_array, img_width):
     return
 
 
-def find_rrt_path(image_path, start_point, goal_coordinates):
+def find_rrt_path(img, start_point, goal_coordinates):
     if start_point is None:
         print("Start point couldn't be located, user is not visible")
         return
 
-    # Load the image (black and white, where black represents obstacles and white represents the path)
-    image = Image.open(image_path).convert("1")
-    image_array = np.array(image)
-    obstacles = np.where(image_array == 0, 0, 1)
     if goal_coordinates is None:
-        goal_coordinates = find_goal_point(obstacles,image.width)
+        goal_coordinates = create_temp_goal_point(img, img.shape[1])
         if goal_coordinates is None:
             print("Goal point couldn't be located. It might be hidden with an obstacle")
             return
@@ -168,11 +165,11 @@ def find_rrt_path(image_path, start_point, goal_coordinates):
     start = Node(start_y, start_x)
 
     goal_x, goal_y = goal_coordinates
-    goal = Node(goal_y, goal_x)
+    goal = Node(goal_x, goal_y)
 
-    path_result = rrt_star(start, goal, obstacles)
+    path_result = rrt_star(start, goal, img)
     if path_result:
-        plot_cv2_path(obstacles, path_result, (start.x, start.y), (goal.x, goal.y))
+        plot_cv2_path(img, path_result, (start.x, start.y), (goal.x, goal.y))
     else:
         print("path was not found!")
 

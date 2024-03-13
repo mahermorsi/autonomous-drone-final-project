@@ -41,7 +41,9 @@ def detect_objects(img):
     height, width, channels = img.shape
     results = model.predict(source=img.copy(), save=False, save_txt=False, retina_masks=True)
     result = results[0]
-
+    masks = result.masks.cpu().data.numpy()
+    summed_masks = np.sum(masks, axis=0)
+    normalized_mask = 255 - (summed_masks > 0).astype(np.uint8) * 255
     segmentation_contours_idx = []
     for seg in result.masks.xyn:
         # contours
@@ -55,7 +57,7 @@ def detect_objects(img):
     class_ids = np.array(result.boxes.cls.cpu(), dtype="int")
     # Get scores
     scores = np.array(result.boxes.conf.cpu(), dtype="float").round(2)
-    return bboxes, class_ids, segmentation_contours_idx, scores
+    return bboxes, class_ids, segmentation_contours_idx, scores, normalized_mask
 
 
 def calculate_rrt_path(img, start_point):
@@ -65,23 +67,23 @@ def calculate_rrt_path(img, start_point):
         return 0
 
     try:
-        bboxes, classes, segmentations, scores = detect_objects(img)
+        bboxes, classes, segmentations, scores, masks_img = detect_objects(img)
         for bbox, class_id, seg, score in zip(bboxes, classes, segmentations, scores):
             try:
-                # our destination goal is a bicycle, if it's found within the frame, take a point. This is our destination point.
+                # our destination goal is a bicycle, if it's found within the frame, save its coordinate. This is our destination point.
                 if class_id == 1:
                     end_point = tuple(np.min(seg, axis=0))
                 cv2.fillPoly(img, [seg], (0, 0, 0))
             except Exception as e_inner:
                 print(f"Error while processing object: {e_inner}")
-
-        drone_frame_path = "image results/captured_image.jpg"
-        cv2.imwrite(drone_frame_path, img)
-        filtered_image_path = convert_non_black_to_white(drone_frame_path)
-        if filtered_image_path:
-            find_rrt_path(filtered_image_path, start_point,end_point)
-        else:
-            print("convert_non_black_to_white returned None. Unable to proceed.")
+        find_rrt_path(masks_img, start_point, end_point)
+        # drone_frame_path = "image results/captured_image.jpg"
+        # cv2.imwrite(drone_frame_path, img)
+        # filtered_image_path = convert_non_black_to_white(drone_frame_path)
+        # if filtered_image_path:
+        #     find_rrt_path(filtered_image_path, start_point,end_point)
+        # else:
+        #     print("convert_non_black_to_white returned None. Unable to proceed.")
 
     except Exception as e_outer:
         print(f"Error in draw_contour_on_objects function: {e_outer}")
