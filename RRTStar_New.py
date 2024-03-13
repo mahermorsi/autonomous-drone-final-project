@@ -149,7 +149,7 @@ def find_goal_point(image_array, img_width):
     return
 
 
-def find_rrt_path(image_path, start_point):
+def find_rrt_path(image_path, start_point, goal_coordinates):
     if start_point is None:
         print("Start point couldn't be located, user is not visible")
         return
@@ -158,10 +158,11 @@ def find_rrt_path(image_path, start_point):
     image = Image.open(image_path).convert("1")
     image_array = np.array(image)
     obstacles = np.where(image_array == 0, 0, 1)
-    goal_coordinates = find_goal_point(obstacles,image.width)
     if goal_coordinates is None:
-        print("Goal point couldn't be located. It might be hidden with an obstacle")
-        return
+        goal_coordinates = find_goal_point(obstacles,image.width)
+        if goal_coordinates is None:
+            print("Goal point couldn't be located. It might be hidden with an obstacle")
+            return
 
     start_x, start_y = start_point
     start = Node(start_y, start_x)

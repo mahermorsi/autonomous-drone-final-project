@@ -37,10 +37,11 @@ def reset_drone_engines(me):
 
 def detect_objects(img):
     # Get img shape
-    model = YOLO('yolo-weights/yolov8s-seg.pt')
+    model = YOLO('yolo-weights/yolov8x-seg.pt')
     height, width, channels = img.shape
-    results = model.predict(source=img.copy(), save=False, save_txt=False)
+    results = model.predict(source=img.copy(), save=False, save_txt=False, retina_masks=True)
     result = results[0]
+
     segmentation_contours_idx = []
     for seg in result.masks.xyn:
         # contours
@@ -49,29 +50,28 @@ def detect_objects(img):
         segment = np.array(seg, dtype=np.int32)
         segmentation_contours_idx.append(segment)
 
-    # bboxes = np.array(result.boxes.xyxy.cpu(), dtype="int")
+    bboxes = np.array(result.boxes.xyxy.cpu(), dtype="int")
     # Get class ids
-    # class_ids = np.array(result.boxes.cls.cpu(), dtype="int")
+    class_ids = np.array(result.boxes.cls.cpu(), dtype="int")
     # Get scores
-    # scores = np.array(result.boxes.conf.cpu(), dtype="float").round(2)
-    # return bboxes, class_ids, segmentation_contours_idx, scores
-    return segmentation_contours_idx
+    scores = np.array(result.boxes.conf.cpu(), dtype="float").round(2)
+    return bboxes, class_ids, segmentation_contours_idx, scores
+
 
 def calculate_rrt_path(img, start_point):
+    end_point = None
     if img is None:
         print("Input image is None. Exiting function.")
         return 0
 
     try:
-        # bboxes, classes, segmentations, scores = detect_objects(img)
-        # for bbox, class_id, seg, score in zip(bboxes, classes, segmentations, scores):
-        segmentations = detect_objects(img)
-        for seg in segmentations:
+        bboxes, classes, segmentations, scores = detect_objects(img)
+        for bbox, class_id, seg, score in zip(bboxes, classes, segmentations, scores):
             try:
-                # (x, y, x2, y2) = bbox
-                # cv2.polylines(img, [seg], True, (0, 0, 255), 4)
+                # our destination goal is a bicycle, if it's found within the frame, take a point. This is our destination point.
+                if class_id == 1:
+                    end_point = tuple(np.min(seg, axis=0))
                 cv2.fillPoly(img, [seg], (0, 0, 0))
-                # cv2.putText(img, str(class_id), (x, y - 10), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2)
             except Exception as e_inner:
                 print(f"Error while processing object: {e_inner}")
 
@@ -79,7 +79,7 @@ def calculate_rrt_path(img, start_point):
         cv2.imwrite(drone_frame_path, img)
         filtered_image_path = convert_non_black_to_white(drone_frame_path)
         if filtered_image_path:
-            find_rrt_path(filtered_image_path, start_point)
+            find_rrt_path(filtered_image_path, start_point,end_point)
         else:
             print("convert_non_black_to_white returned None. Unable to proceed.")
 

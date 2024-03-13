@@ -1,3 +1,6 @@
-/image results/final path.jpg
-/test files
 /image results
+/yolo-weights
+/example screenshots
+/SAM
+/tree detection
+/FiftyOne
