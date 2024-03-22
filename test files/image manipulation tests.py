@@ -51,26 +51,26 @@ def get_start_point_from_contour(img):
 
 width = 640  # WIDTH OF THE IMAGE
 height = 480  # HEIGHT OF THE IMAGE
-myFrame=cv2.imread('img2.png')
+myFrame=cv2.imread('../example screenshots/pic3.png')
 
 img, imgHsv = preprocess_image(myFrame, width, height)
-# cv2.imshow("image", img)
-# cv2.waitKey(0)
-# cv2.imshow("image", imgHsv)
-# cv2.waitKey(0)
+cv2.imshow("image", img)
+cv2.waitKey(0)
+cv2.imshow("image", imgHsv)
+cv2.waitKey(0)
 
-h_min, h_max, s_min, s_max, v_min, v_max = 0, 10, 70, 255, 50, 255
+h_min, h_max, s_min, s_max, v_min, v_max = 117, 132, 208, 255, 0, 210
 lower = np.array([h_min, s_min, v_min])
 upper = np.array([h_max, s_max, v_max])
 
 result, mask = filter_image(imgHsv, lower, upper)
-# cv2.imshow("image", result)
-# cv2.waitKey(0)
-# cv2.imshow("image", mask)
-# cv2.waitKey(0)
+cv2.imshow("image", result)
+cv2.waitKey(0)
+cv2.imshow("image", mask)
+cv2.waitKey(0)
 imgGray = process_image(result)
-# cv2.imshow("image", imgGray)
-# cv2.waitKey(0)
+cv2.imshow("image", imgGray)
+cv2.waitKey(0)
 
 threshold1 = 89
 threshold2 = 0
