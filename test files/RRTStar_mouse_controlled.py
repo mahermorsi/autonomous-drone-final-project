@@ -148,4 +148,4 @@ def find_rrt_path(image_path):
         print("path was not found!")
 
 
-find_rrt_path('example screenshots/masked_image.png')
+find_rrt_path('../example screenshots/masked_image.png')

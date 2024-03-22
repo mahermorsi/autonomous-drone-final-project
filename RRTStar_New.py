@@ -114,7 +114,7 @@ def plot_cv2_path(obstacles, path, start, goal):
 
     # Save image
 
-    cv2.imwrite('image results/final path.jpg', image_color)
+    cv2.imwrite('final_path.jpg', image_color)
     # Display image
     # cv2.imshow("RRT* Path Planning", image_color)
     # cv2.waitKey(0)
@@ -131,7 +131,7 @@ def plot_path(image, path, start, goal):
 
     plt.legend()
     plt.title("RRT* Path Planning")
-    plt.savefig("image results/final path.jpg")
+    plt.savefig("final_path.jpg")
     # plt.show()
 
 

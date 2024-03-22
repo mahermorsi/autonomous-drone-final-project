@@ -1,11 +1,9 @@
-import threading
 import time
 import cv2
 import numpy as np
 from djitellopy import Tello
 from ultralytics import YOLO
 from RRTStar_New import find_rrt_path
-from mask_white import convert_non_black_to_white
 import datetime
 import multiprocessing
 
@@ -25,15 +23,13 @@ isHeightCorrect = 0
 frameWidth = width
 frameHeight = height
 
-lock = threading.Lock()  # lock until the function completes its job, before receiving another image.
-thread_is_processing = False
-
 
 def reset_drone_engines(me):
     me.for_back_velocity = 0
     me.left_right_velocity = 0
     me.up_down_velocity = 0
     me.yaw_velocity = 0
+
 
 def detect_objects(img):
     # Get img shape
@@ -77,13 +73,6 @@ def calculate_rrt_path(img, start_point):
             except Exception as e_inner:
                 print(f"Error while processing object: {e_inner}")
         find_rrt_path(masks_img, start_point, end_point)
-        # drone_frame_path = "image results/captured_image.jpg"
-        # cv2.imwrite(drone_frame_path, img)
-        # filtered_image_path = convert_non_black_to_white(drone_frame_path)
-        # if filtered_image_path:
-        #     find_rrt_path(filtered_image_path, start_point,end_point)
-        # else:
-        #     print("convert_non_black_to_white returned None. Unable to proceed.")
 
     except Exception as e_outer:
         print(f"Error in draw_contour_on_objects function: {e_outer}")
@@ -293,6 +282,7 @@ def worker(args):
 
 
 def main():
+    global startCounter
     pool = multiprocessing.Pool()
     # CONNECT TO TELLO
     me = Tello()
@@ -335,7 +325,7 @@ def main():
         threshold1, threshold2 = get_thresholds()
         imgDil = detect_edges(imgGray, threshold1, threshold2)
 
-        me.left_right_velocity, me.for_back_velocity, me.up_down_velocity, me.yaw_velocity  =control_drone(imgDil, imgContour, me)
+        me.left_right_velocity, me.for_back_velocity, me.up_down_velocity, me.yaw_velocity = control_drone(imgDil, imgContour, me)
         display(imgContour)
 
         current_time = time.time()
@@ -362,7 +352,7 @@ def main():
         image_bgr = cv2.cvtColor(imgContour, cv2.COLOR_RGB2BGR)
         cv2.imshow('user track', image_bgr)
         try:
-            rrt_image = cv2.imread("image results/final path.jpg")
+            rrt_image = cv2.imread("final_path.jpg")
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             cv2.putText(rrt_image, timestamp, (10, rrt_image.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255),2)
             cv2.imshow("RRT* Path Planning", rrt_image)
