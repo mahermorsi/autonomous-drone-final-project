@@ -169,12 +169,7 @@ def find_rrt_path(img, start_point, goal_coordinates):
 
     path_result = rrt_star(start, goal, img)
     if path_result:
-        plot_cv2_path(img, path_result, (start.x, start.y), (goal.x, goal.y))
+        plot_path(img, path_result, (start.x, start.y), (goal.x, goal.y))
     else:
         print("path was not found!")
 
-
-# find_rrt_path('example screenshots/masked_image.png', (500,300))
-# img=cv2.imread('final path.png')
-# cv2.imshow('rrt track',img)
-# cv2.waitKey(0)

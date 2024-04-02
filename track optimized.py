@@ -6,11 +6,12 @@ from ultralytics import YOLO
 from RRTStar_New import find_rrt_path
 import datetime
 import multiprocessing
+import matplotlib.pyplot as plt
 
 ######################################################################
 width = 640  # WIDTH OF THE IMAGE
 height = 480  # HEIGHT OF THE IMAGE
-deadZone = 65  # initially it was 100
+deadZone = 55  # initially it was 100
 startCounter = 0
 global imgContour
 isHeightCorrect = 0
@@ -24,11 +25,9 @@ frameWidth = width
 frameHeight = height
 
 
-def reset_drone_engines(me):
-    me.for_back_velocity = 0
-    me.left_right_velocity = 0
-    me.up_down_velocity = 0
-    me.yaw_velocity = 0
+def create_white_image(width=640, height=480, filename="final_Path.jpg"):
+    image = np.ones((height, width, 3), dtype=np.uint8) * 255
+    plt.imsave(filename, image)
 
 
 def detect_objects(img):
@@ -58,6 +57,10 @@ def detect_objects(img):
 
 def calculate_rrt_path(img, start_point):
     end_point = None
+    if start_point[0] is None:
+        print(" user is not detected")
+        return 0
+
     if img is None:
         print("Input image is None. Exiting function.")
         return 0
@@ -67,6 +70,7 @@ def calculate_rrt_path(img, start_point):
         for bbox, class_id, seg, score in zip(bboxes, classes, segmentations, scores):
             try:
                 # our destination goal is a bicycle, if it's found within the frame, save its coordinate. This is our destination point.
+                # truck=7 | bicycle=1 | traffic light=9
                 if class_id == 1:
                     end_point = tuple(np.min(seg, axis=0))
                 cv2.fillPoly(img, [seg], (0, 0, 0))
@@ -115,101 +119,83 @@ def stack_images(scale, imgArray):
     return ver
 
 
-def get_start_point_from_contour(img):
-    contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    min_x = float('inf')
-    min_y = float('inf')
-
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        area_min = cv2.getTrackbarPos("Area", "Parameters")
-        if area < area_min:
-            continue
-        for point in contour:
-            x, y = point[0]
-            min_x = min(min_x, x)
-            min_y = min(min_y, y)
-
-    # If no points found, return None
-    if min_x == float('inf') or min_y == float('inf'):
-        return None
-
-    # Return the smallest x and y coordinates found
-    return min_x, min_y
-
-
 def control_drone(img, imgContour, me):
     contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     global isHeightCorrect
+    cx=None
+    cy=None
     for cnt in contours:
         area = cv2.contourArea(cnt)
         areaMin = cv2.getTrackbarPos("Area", "Parameters")
-        if area >= areaMin:
-            cv2.drawContours(imgContour, cnt, -1, (255, 0, 255), 7)
-            peri = cv2.arcLength(cnt, True)
-            approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
-            # print(len(approx))
-            x, y, w, h = cv2.boundingRect(approx)
-            cx = int(x + (w / 2))  # CENTER X OF THE OBJECT
-            cy = int(y + (h / 2))  # CENTER Y OF THE OBJECT
-            if isHeightCorrect:
-                # there might be another objects with the same user's shirt color, if their center point isn't near the dead-zone, it's likely not the user.
-                if cx > (frameWidth/2 + 2*deadZone) or cx < (frameWidth/2 - 2*deadZone):
-                    continue
-                if cy < (frameHeight - 4*deadZone):
-                    continue
-                if cy < (frameHeight - 3*deadZone):
-                    cv2.putText(imgContour, "FORWARD", (int(frameWidth/2 - deadZone+20), int(frameHeight/2 - 2*deadZone)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
-                    me.for_back_velocity = 30
+        if area < areaMin:
+            continue
+        cv2.drawContours(imgContour, cnt, -1, (255, 0, 255), 7)
+        peri = cv2.arcLength(cnt, True)
+        approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
+        # print(len(approx))
+        x, y, w, h = cv2.boundingRect(approx)
+        cx = int(x + (w / 2))  # CENTER X OF THE OBJECT
+        cy = int(y + (h / 2))  # CENTER Y OF THE OBJECT
+        if isHeightCorrect:
+            # there might be another objects with the same user's shirt color, if their center point isn't near the dead-zone, it's likely not the user.
+            if cx > (frameWidth/2 + 2*deadZone) or cx < (frameWidth/2 - 2*deadZone):
+                continue
+            if cy < (frameHeight - 4 *deadZone):
+                continue
+            if cy < (frameHeight - 2*deadZone-20):
+                cv2.putText(imgContour, "FORWARD", (int(frameWidth/2 - deadZone+20), int(frameHeight/2 - 2*deadZone)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
+                me.for_back_velocity = 30
 
-                elif cy > (frameWidth - deadZone):
-                    cv2.putText(imgContour, "BACKWARD", (int(frameWidth/2 - deadZone+10), int(frameHeight/2 + 2*deadZone)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
-                    me.for_back_velocity = -30
-
-                else:
-                    me.for_back_velocity = 0
-
-
-                if cx < int(frameWidth / 2) - deadZone:
-
-                    cv2.putText(imgContour, " <- ROTATE LEFT <-", (10, int(frameHeight/2)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
-                    me.yaw_velocity = -20
-
-                elif cx > int(frameWidth / 2) + deadZone:
-
-                    cv2.putText(imgContour, "-> ROTATE RIGHT ->", (int(frameWidth/2 + deadZone)+10, int(frameHeight/2)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
-                    me.yaw_velocity = 20
-
-                else:
-                    me.yaw_velocity = 0
-
-            height = me.get_height()
-            if height < 330 and not isHeightCorrect:
-                me.up_down_velocity = 40
-                cv2.putText(imgContour, "GO UP || height is: " + str(height), (20,20), cv2.FONT_HERSHEY_COMPLEX, 0.6,
-                            (255, 0, 0), 2)
-
-            elif height > 340 and not isHeightCorrect:
-                me.up_down_velocity = -30
-                cv2.putText(imgContour, "GO DOWN || height is: " + str(height), (20,20), cv2.FONT_HERSHEY_COMPLEX, 0.6,
-                            (255, 0, 0), 2)
+            elif cy > (frameHeight - deadZone-10):
+                cv2.putText(imgContour, "BACKWARD", (int(frameWidth/2 - deadZone+10), int(frameHeight/2 + 2*deadZone)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
+                me.for_back_velocity = -30
 
             else:
-                me.up_down_velocity = 0
-                isHeightCorrect = 1
+                me.for_back_velocity = 0
 
+            if cx < int(frameWidth / 2) - deadZone:
+
+                cv2.putText(imgContour, " <- ROTATE LEFT <-", (10, int(frameHeight/2)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
+                me.yaw_velocity = -25
+
+            elif cx > int(frameWidth / 2) + deadZone:
+
+                cv2.putText(imgContour, "-> ROTATE RIGHT ->", (int(frameWidth/2 + deadZone)+10, int(frameHeight/2)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
+                me.yaw_velocity = 25
+
+            else:
+                me.yaw_velocity = 0
             cv2.circle(imgContour, (cx, cy), 4, (0, 255, 0), 3)
             cv2.rectangle(imgContour, (x, y), (x + w, y + h), (0, 255, 0), 5)
-            cv2.putText(imgContour, "Area: " + str(int(area)), (x + w + 20, y + 45), cv2.FONT_HERSHEY_COMPLEX, 0.7,(0, 255, 0), 2)
+            cv2.putText(imgContour, "Area: " + str(int(area)), (x + w + 20, y + 45), cv2.FONT_HERSHEY_COMPLEX, 0.7,
+                        (0, 255, 0), 2)
             break
-    return me.left_right_velocity, me.for_back_velocity, me.up_down_velocity, me.yaw_velocity
+
+    height = me.get_height()
+    if height < 400 and not isHeightCorrect:
+        me.up_down_velocity = 40
+        cv2.putText(imgContour, "GO UP || height is: " + str(height), (20,20), cv2.FONT_HERSHEY_COMPLEX, 0.6,
+                    (255, 0, 0), 2)
+
+    elif height > 410 and not isHeightCorrect:
+        me.up_down_velocity = -30
+        cv2.putText(imgContour, "GO DOWN || height is: " + str(height), (20,20), cv2.FONT_HERSHEY_COMPLEX, 0.6,
+                    (255, 0, 0), 2)
+
+    else:
+        me.up_down_velocity = 0
+        isHeightCorrect = 1
+
+    cy2=min(cy+90,479) if cy is not None else None
+    cx2=cx+20 if cx is not None else None
+    return me.left_right_velocity, me.for_back_velocity, me.up_down_velocity, me.yaw_velocity,cy2,cx2
 
 
 def display(img):
-    cv2.line(img, (int(frameWidth / 2) - deadZone, 0), (int(frameWidth / 2) - deadZone, frameHeight), (0, 255, 255), 3)
-    cv2.line(img, (int(frameWidth / 2) + deadZone, 0), (int(frameWidth / 2) + deadZone, frameHeight), (0, 255, 255), 3)
-    cv2.line(img, (0, int(frameHeight) - deadZone), (frameWidth, int(frameHeight) - deadZone), (0, 255, 255), 3)
-    cv2.line(img, (0, int(frameHeight) - 3*deadZone), (frameWidth, int(frameHeight) - 3*deadZone), (0, 255, 255), 3)
+    cv2.line(img, (int(frameWidth / 2) - deadZone, int(frameHeight) - 3*deadZone), (int(frameWidth / 2) - deadZone, frameHeight-deadZone), (0, 255, 255), 3)
+    cv2.line(img, (int(frameWidth / 2) + deadZone, int(frameHeight) - 3*deadZone), (int(frameWidth / 2) + deadZone, int(frameHeight) - deadZone), (0, 255, 255), 3)
+    cv2.line(img, (int(frameWidth / 2) - deadZone, int(frameHeight) - deadZone), (int(frameWidth / 2) + deadZone, int(frameHeight) - deadZone), (0, 255, 255), 3)
+    cv2.line(img, (int(frameWidth / 2) - deadZone, int(frameHeight) - 3*deadZone), (int(frameWidth / 2) + deadZone, int(frameHeight) - 3*deadZone), (0, 255, 255), 3)
 
 
 def create_cv_windows():
@@ -226,7 +212,7 @@ def create_cv_windows():
     cv2.resizeWindow("Parameters", 640, 240)
     cv2.createTrackbar("Threshold1", "Parameters", 89, 255, empty)
     cv2.createTrackbar("Threshold2", "Parameters", 0, 255, empty)
-    cv2.createTrackbar("Area", "Parameters", 2000, 7000, empty)
+    cv2.createTrackbar("Area", "Parameters", 1800, 8000, empty)
 
     cv2.namedWindow("RRT* Path Planning")
     cv2.resizeWindow("RRT* Path Planning", 640, 480)
@@ -267,6 +253,7 @@ def detect_edges(img, threshold1, threshold2):
     imgDil = cv2.dilate(imgCanny, kernel, iterations=1)
     return imgDil
 
+
 def get_thresholds():
     threshold1 = cv2.getTrackbarPos("Threshold1", "Parameters")
     threshold2 = cv2.getTrackbarPos("Threshold2", "Parameters")
@@ -283,30 +270,31 @@ def main():
     global startCounter
     pool = multiprocessing.Pool()
     # CONNECT TO TELLO
-    me = Tello()
-    me.connect()
-    me.for_back_velocity = 0
-    me.left_right_velocity = 0
-    me.up_down_velocity = 0
-    me.yaw_velocity = 0
-    me.speed = 0
-    me.TIME_BTW_RC_CONTROL_COMMANDS = 0.1
+    drone = Tello()
+    drone.connect()
+    drone.for_back_velocity = 0
+    drone.left_right_velocity = 0
+    drone.up_down_velocity = 0
+    drone.yaw_velocity = 0
+    drone.speed = 0
+    drone.TIME_BTW_RC_CONTROL_COMMANDS = 0.1
 
-    print(me.get_battery())
+    print(drone.get_battery())
 
-    me.streamoff()
-    me.streamon()
+    drone.streamoff()
+    drone.streamon()
     create_cv_windows()
+    create_white_image()
     frame = None
     while frame is None or frame.mean() < 10:  # Check for black frame
-        frame = me.get_frame_read().frame
+        frame = drone.get_frame_read().frame
         print("NO FRAME!")
         time.sleep(0.1)
 
     execution_time = time.time()
     while True:
         # GET THE IMAGE FROM TELLO
-        frame_read = me.get_frame_read()
+        frame_read = drone.get_frame_read()
         myFrame = frame_read.frame
 
         img, imgHsv = preprocess_image(myFrame, width, height)
@@ -323,27 +311,26 @@ def main():
         threshold1, threshold2 = get_thresholds()
         imgDil = detect_edges(imgGray, threshold1, threshold2)
 
-        me.left_right_velocity, me.for_back_velocity, me.up_down_velocity, me.yaw_velocity = control_drone(imgDil, imgContour, me)
+        drone.left_right_velocity, drone.for_back_velocity, drone.up_down_velocity, drone.yaw_velocity,cx,cy = control_drone(imgDil, imgContour, drone)
         display(imgContour)
 
         current_time = time.time()
-        if current_time - execution_time >= 30:
+        if current_time - execution_time >= 20:
             execution_time = current_time
-            start_point = get_start_point_from_contour(imgDil)
+            start_point = cx,cy
             print(start_point)
             pool.apply_async(worker, args=((objectsImage, start_point),))
 
         ################# FLIGHT
 
-        # if startCounter == 0:
-        #     me.takeoff()
-        #     time.sleep(1)
-        #     startCounter = 1
-        #
-        # # SEND VELOCITY VALUES TO TELLO
-        #
-        # if me.send_rc_control:
-        #     me.send_rc_control(me.left_right_velocity, me.for_back_velocity, me.up_down_velocity, me.yaw_velocity)
+        if startCounter == 0:
+            drone.takeoff()
+            time.sleep(1)
+            startCounter = 1
+
+        # SEND VELOCITY VALUES TO TELLO
+        if drone.send_rc_control:
+            drone.send_rc_control(drone.left_right_velocity, drone.for_back_velocity, drone.up_down_velocity, drone.yaw_velocity)
 
         # stack = stack_images(0.9, ([img, result], [imgDil, imgContour]))
         # cv2.imshow('Horizontal Stacking', stack)
@@ -360,9 +347,8 @@ def main():
             print(e)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
-            me.land()
-            me.end()
-
+            drone.land()
+            drone.end()
             break
 
     cv2.destroyAllWindows()
