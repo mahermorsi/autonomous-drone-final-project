@@ -144,24 +144,25 @@ def control_drone(img, imgContour, me):
                 continue
             if cy < (frameHeight - 2*deadZone-20):
                 cv2.putText(imgContour, "FORWARD", (int(frameWidth/2 - deadZone+20), int(frameHeight/2 - 2*deadZone)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
-                me.for_back_velocity = 30
+                me.for_back_velocity = 35
 
             elif cy > (frameHeight - deadZone-10):
                 cv2.putText(imgContour, "BACKWARD", (int(frameWidth/2 - deadZone+10), int(frameHeight/2 + 2*deadZone)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
-                me.for_back_velocity = -30
+                me.for_back_velocity = -35
 
             else:
                 me.for_back_velocity = 0
 
+
             if cx < int(frameWidth / 2) - deadZone:
 
                 cv2.putText(imgContour, " <- ROTATE LEFT <-", (10, int(frameHeight/2)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
-                me.yaw_velocity = -25
+                me.yaw_velocity = -30
 
             elif cx > int(frameWidth / 2) + deadZone:
 
                 cv2.putText(imgContour, "-> ROTATE RIGHT ->", (int(frameWidth/2 + deadZone)+10, int(frameHeight/2)), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 0, 0), 2)
-                me.yaw_velocity = 25
+                me.yaw_velocity = 30
 
             else:
                 me.yaw_velocity = 0
@@ -197,7 +198,6 @@ def display(img):
     cv2.line(img, (int(frameWidth / 2) - deadZone, int(frameHeight) - deadZone), (int(frameWidth / 2) + deadZone, int(frameHeight) - deadZone), (0, 255, 255), 3)
     cv2.line(img, (int(frameWidth / 2) - deadZone, int(frameHeight) - 3*deadZone), (int(frameWidth / 2) + deadZone, int(frameHeight) - 3*deadZone), (0, 255, 255), 3)
 
-
 def create_cv_windows():
     cv2.namedWindow("HSV")
     cv2.resizeWindow("HSV", 640, 240)
@@ -212,7 +212,7 @@ def create_cv_windows():
     cv2.resizeWindow("Parameters", 640, 240)
     cv2.createTrackbar("Threshold1", "Parameters", 89, 255, empty)
     cv2.createTrackbar("Threshold2", "Parameters", 0, 255, empty)
-    cv2.createTrackbar("Area", "Parameters", 1800, 8000, empty)
+    cv2.createTrackbar("Area", "Parameters", 1400, 7000, empty)
 
     cv2.namedWindow("RRT* Path Planning")
     cv2.resizeWindow("RRT* Path Planning", 640, 480)
@@ -252,7 +252,6 @@ def detect_edges(img, threshold1, threshold2):
     kernel = np.ones((5, 5))
     imgDil = cv2.dilate(imgCanny, kernel, iterations=1)
     return imgDil
-
 
 def get_thresholds():
     threshold1 = cv2.getTrackbarPos("Threshold1", "Parameters")
@@ -315,7 +314,7 @@ def main():
         display(imgContour)
 
         current_time = time.time()
-        if current_time - execution_time >= 20:
+        if current_time - execution_time >= 10 and isHeightCorrect:
             execution_time = current_time
             start_point = cx,cy
             print(start_point)
@@ -329,6 +328,7 @@ def main():
             startCounter = 1
 
         # SEND VELOCITY VALUES TO TELLO
+
         if drone.send_rc_control:
             drone.send_rc_control(drone.left_right_velocity, drone.for_back_velocity, drone.up_down_velocity, drone.yaw_velocity)
 
@@ -339,16 +339,18 @@ def main():
         try:
             rrt_image = cv2.imread("final_path.jpg")
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            cv2.putText(rrt_image, timestamp, (10, rrt_image.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255),2)
-            cv2.imshow("RRT* Path Planning", rrt_image)
             if rrt_image is None:
-                raise FileNotFoundError("Image file not found or unable to read.")
+                continue
+            cv2.putText(rrt_image, f'{timestamp} | Battery: {drone.get_battery()}', (10, rrt_image.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255),2)
+            cv2.imshow("RRT* Path Planning", rrt_image)
+
         except FileNotFoundError as e:
             print(e)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             drone.land()
             drone.end()
+
             break
 
     cv2.destroyAllWindows()

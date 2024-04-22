@@ -120,6 +120,7 @@ def plot_cv2_path(obstacles, path, start, goal):
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
 
+
 def plot_path(image, path, start, goal):
     plt.imshow(image, cmap="gray")
     path = np.array(path)
@@ -132,6 +133,7 @@ def plot_path(image, path, start, goal):
     plt.legend()
     plt.title("RRT* Path Planning")
     plt.savefig("final_path.jpg")
+    plt.close()
     # plt.show()
 
 
@@ -156,7 +158,8 @@ def find_rrt_path(img, start_point, goal_coordinates):
         return
 
     if goal_coordinates is None:
-        goal_coordinates = create_temp_goal_point(img, img.shape[1])
+        #goal_coordinates = create_temp_goal_point(img, img.shape[1])
+        print("destination goal isn't detected")
         if goal_coordinates is None:
             print("Goal point couldn't be located. It might be hidden with an obstacle")
             return
@@ -168,8 +171,16 @@ def find_rrt_path(img, start_point, goal_coordinates):
     goal = Node(goal_x, goal_y)
 
     path_result = rrt_star(start, goal, img)
+    if len(path_result) < 10:
+        print("path is incomplete!")
+        return
     if path_result:
         plot_path(img, path_result, (start.x, start.y), (goal.x, goal.y))
     else:
         print("path was not found!")
 
+
+# find_rrt_path('example screenshots/masked_image.png', (500,300))
+# img=cv2.imread('final_path.jpg')
+# cv2.imshow('rrt track',img)
+# cv2.waitKey(0)
